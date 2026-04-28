@@ -39,6 +39,48 @@ fn insert_provider(db: &crate::db::Db, name: &str, enabled: bool) -> providers::
     .expect("insert provider")
 }
 
+fn insert_sort_mode_with_providers(db: &crate::db::Db, provider_ids: &[i64]) -> i64 {
+    let conn = db.open_connection().expect("open db");
+    conn.execute(
+        "INSERT INTO sort_modes(name, created_at, updated_at) VALUES (?1, ?2, ?3)",
+        rusqlite::params!["Mode A", 1000, 1000],
+    )
+    .expect("insert mode");
+    let mode_id = conn.last_insert_rowid();
+    for (idx, provider_id) in provider_ids.iter().enumerate() {
+        conn.execute(
+            r#"
+INSERT INTO sort_mode_providers(
+  mode_id,
+  cli_key,
+  provider_id,
+  sort_order,
+  enabled,
+  created_at,
+  updated_at
+) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+"#,
+            rusqlite::params![mode_id, "claude", provider_id, idx as i64, 1, 1000, 1000],
+        )
+        .expect("insert mode provider");
+    }
+    mode_id
+}
+
+fn open_circuit_for_provider(provider_id: i64, now: i64) -> circuit_breaker::CircuitBreaker {
+    let circuit = circuit_breaker::CircuitBreaker::new(
+        circuit_breaker::CircuitBreakerConfig {
+            failure_threshold: 1,
+            open_duration_secs: 3600,
+        },
+        HashMap::new(),
+        None,
+    );
+    circuit.record_failure(provider_id, now);
+    assert!(!circuit.should_allow(provider_id, now).allow);
+    circuit
+}
+
 #[test]
 fn resolve_session_bound_provider_id_skips_disabled_bound_provider() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -212,4 +254,82 @@ fn resolve_session_bound_provider_id_clears_stale_binding_when_bound_provider_no
     assert_eq!(selected, None);
     assert_eq!(ids(&candidates), vec![id2]);
     assert_eq!(session.get_bound_provider("claude", "sess_1", now), None);
+}
+
+#[test]
+fn default_mode_switches_to_enabled_provider_after_bound_provider_disabled_and_circuit_open() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("test.db");
+    let db = crate::db::init_for_tests(&db_path).expect("init db");
+
+    let p1 = insert_provider(&db, "P1", true);
+    let p2 = insert_provider(&db, "P2", true);
+    let now = 1000;
+    let session = session_manager::SessionManager::new();
+    session.bind_success("claude", "sess_1", p1.id, None, now);
+    let circuit = open_circuit_for_provider(p1.id, now);
+
+    providers::set_enabled(&db, p1.id, false).expect("disable provider 1 globally");
+
+    let mut enabled =
+        providers::list_enabled_for_gateway_in_mode(&db, "claude", None).expect("list enabled");
+    assert_eq!(ids(&enabled), vec![p2.id]);
+
+    let selected = resolve_session_bound_provider_id(
+        &session,
+        &circuit,
+        "claude",
+        Some("sess_1"),
+        now,
+        true,
+        None,
+        &mut enabled,
+        Some(&[p1.id, p2.id]),
+    );
+
+    assert_eq!(ids(&enabled), vec![p2.id]);
+    assert_eq!(selected, None);
+    assert_eq!(session.get_bound_provider("claude", "sess_1", now), None);
+}
+
+#[test]
+fn sort_mode_ignores_global_provider_enabled_but_open_circuit_prevents_session_reuse() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("test.db");
+    let db = crate::db::init_for_tests(&db_path).expect("init db");
+
+    let p1 = insert_provider(&db, "P1", true);
+    let p2 = insert_provider(&db, "P2", true);
+    let mode_id = insert_sort_mode_with_providers(&db, &[p1.id, p2.id]);
+    let now = 1000;
+    let session = session_manager::SessionManager::new();
+    session.bind_success("claude", "sess_1", p1.id, Some(mode_id), now);
+    let circuit = open_circuit_for_provider(p1.id, now);
+
+    providers::set_enabled(&db, p1.id, false).expect("disable provider 1 globally");
+
+    let mut enabled = providers::list_enabled_for_gateway_in_mode(&db, "claude", Some(mode_id))
+        .expect("list enabled");
+    assert_eq!(ids(&enabled), vec![p1.id, p2.id]);
+
+    let selected = resolve_session_bound_provider_id(
+        &session,
+        &circuit,
+        "claude",
+        Some("sess_1"),
+        now,
+        true,
+        None,
+        &mut enabled,
+        Some(&[p1.id, p2.id]),
+    );
+
+    assert_eq!(ids(&enabled), vec![p1.id, p2.id]);
+    assert_eq!(selected, None);
+    assert_eq!(
+        session.get_bound_provider("claude", "sess_1", now),
+        Some(p1.id)
+    );
+    assert!(!circuit.should_allow(p1.id, now).allow);
+    assert!(circuit.should_allow(p2.id, now).allow);
 }

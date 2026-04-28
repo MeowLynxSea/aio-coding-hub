@@ -455,6 +455,53 @@ Realtime-event checklist:
 - Add simple event-rate instrumentation so regression shows up before UI jank
   becomes a user report.
 
+### Mistake 19: Assuming One Enable Flag Owns Every Route View
+
+**Bad**: A route has multiple enable flags (`providers.enabled`,
+`sort_mode_providers.enabled`, workspace-scoped flags, etc.), and code assumes
+one of them is always the global source of truth. In this project, the default
+provider list and sort templates intentionally have different ownership.
+
+**Good**: Define the eligibility owner for each route view explicitly. The
+default provider route is gated by `providers.enabled`; a sort-template route is
+gated by `sort_mode_providers.enabled` and must not silently inherit the
+default route's global switch. Runtime session bindings must be cleared after
+successful changes to the eligibility owner for that route view.
+
+Provider-eligibility checklist:
+- Before changing a gateway candidate query, write down whether it represents
+  the default provider route or a sort-template route.
+- Default provider queries must apply `providers.enabled = 1`.
+- Sort-template gateway queries must apply `sort_mode_providers.enabled = 1`
+  and must not depend on `providers.enabled`.
+- Provider create/save/toggle/delete and sort-mode membership changes clear
+  runtime session bindings for the affected CLI key after persistence succeeds
+  when they change that route view's eligibility.
+- Regression tests cover both the default provider list and active sort-mode
+  paths.
+
+### Mistake 20: Treating Process-Wide Test Environment as Test-Local State
+
+**Bad**: A test fixture mutates process-wide environment variables while a
+mutex guard is dropped before the restore guard. Parallel `cargo test` runs can
+then acquire the lock while stale env vars are still active, or have their env
+vars restored out from under them, causing temp test paths to be written into
+real user config.
+
+**Good**: For struct-owned test fixtures, declare the env restore guard before
+the mutex guard so Rust drops the restore guard first and releases the lock only
+after the environment is clean.
+
+Test-env checklist:
+- Any fixture that mutates `AIO_CODING_HUB_HOME_DIR`,
+  `AIO_CODING_HUB_DOTDIR_NAME`, `AIO_CODING_HUB_TEST_HOME`, `CODEX_HOME`, or
+  similar process-wide env vars must hold one shared env lock.
+- In structs, declare restore guards before lock guards. Do not rely on field
+  names; Rust drops struct fields in declaration order.
+- When a full test run unexpectedly changes real user config, compare the file
+  mtime with session logs for `cargo test` / `pnpm tauri:test` and search for
+  temp fixture names before assuming the user edited the file.
+
 ---
 
 ## Checklist for Cross-Layer Features
@@ -482,6 +529,9 @@ After implementation:
       owning frontend payload type
 - [ ] Confirmed extension matrices (CLI keys, workspace sync scopes, enabled
       flags) are still owned centrally instead of drifting across layers
+- [ ] Confirmed each route/provider view uses its documented enable owner
+      (default provider route vs sort-template route) and invalidates stale
+      runtime session bindings after successful eligibility changes
 - [ ] For request logs, separated real upstream attempts from provider-gate
       skips in user-facing wording
 - [ ] For request logs, documented unsupported CLI folder lookup instead of

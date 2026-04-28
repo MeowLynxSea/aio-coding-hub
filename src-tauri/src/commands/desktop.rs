@@ -761,9 +761,9 @@ mod tests {
 
     struct DesktopCommandTestApp {
         #[allow(dead_code)]
-        env_lock: std::sync::MutexGuard<'static, ()>,
-        #[allow(dead_code)]
         env_restore: EnvRestore,
+        #[allow(dead_code)]
+        env_lock: std::sync::MutexGuard<'static, ()>,
         #[allow(dead_code)]
         home_dir: tempfile::TempDir,
         app: tauri::App<tauri::test::MockRuntime>,

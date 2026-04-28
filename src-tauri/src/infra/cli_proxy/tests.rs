@@ -38,8 +38,8 @@ impl Drop for EnvRestore {
 }
 
 struct CliProxyTestApp {
-    _lock: MutexGuard<'static, ()>,
     _env: EnvRestore,
+    _lock: MutexGuard<'static, ()>,
     #[allow(dead_code)]
     home: tempfile::TempDir,
     app: tauri::App<tauri::test::MockRuntime>,

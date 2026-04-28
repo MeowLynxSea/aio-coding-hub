@@ -94,6 +94,7 @@ fn provider_runtime_reset_decision(
 
     let sensitive_config_changed = previous.base_urls != next.base_urls
         || previous.base_url_mode != next.base_url_mode
+        || previous.enabled != next.enabled
         || previous.auth_mode != next.auth_mode
         || submitted_api_key_changed(previous_api_key, submitted_api_key)
         || previous.source_provider_id != next.source_provider_id
@@ -315,9 +316,11 @@ pub(crate) async fn provider_set_enabled(
     .map_err(Into::into);
 
     if let Ok(ref provider) = result {
+        let cleared_sessions = app_gateway_clear_cli_session_bindings(&app, &provider.cli_key);
         tracing::info!(
             provider_id = provider.id,
             enabled = provider.enabled,
+            cleared_sessions,
             "provider enabled state changed"
         );
     }
@@ -507,6 +510,16 @@ mod tests {
                 Some("sk-existing")
             ),
             ProviderRuntimeResetDecision::default()
+        );
+
+        let mut disabled = next.clone();
+        disabled.enabled = false;
+
+        assert_eq!(
+            provider_runtime_reset_decision(Some(&next), Some("sk-existing"), &disabled, None),
+            ProviderRuntimeResetDecision {
+                clear_session_bindings: true,
+            }
         );
     }
 

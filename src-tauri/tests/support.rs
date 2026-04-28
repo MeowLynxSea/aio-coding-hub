@@ -66,8 +66,8 @@ impl Drop for EnvRestore {
 }
 
 pub struct TestApp {
-    _lock: MutexGuard<'static, ()>,
     _env: EnvRestore,
+    _lock: MutexGuard<'static, ()>,
     #[allow(dead_code)]
     home: TempDir,
     #[allow(dead_code)]
