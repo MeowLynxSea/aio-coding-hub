@@ -47,6 +47,26 @@ without leaking secrets.
 - Full prompt/request bodies unless explicitly sanitized for diagnostics
 - Secrets copied into launcher scripts or temp JSON
 
+## CLI Proxy Status Diagnostics
+
+CLI proxy status is a configuration diagnostic signal, not proof that current
+traffic can or cannot reach the gateway.
+
+- Request logs prove that a request reached the gateway; they do not prove
+  `applied_to_current_gateway`.
+- For status-card drift warnings, trace the full chain:
+  `HomeWorkStatusCard -> useCliProxy -> cliProxyStatusAll -> cli_proxy_status_all -> cli_proxy::status_all`.
+- Keep `enabled` and `applied_to_current_gateway` separate. `enabled` is read
+  from the CLI proxy manifest; `applied_to_current_gateway` is recomputed from
+  the current target files and the running gateway origin.
+- For Codex, inspect `codex_home_mode` and `codex_home_override` before reading
+  `~/.codex`. A stale custom Codex home can make the status card report drift
+  even when the real Codex CLI process is using a valid `~/.codex/config.toml`.
+- Codex applied checks depend on the resolved `config.toml` base URL/provider
+  and a readable `auth.json` with `OPENAI_API_KEY`.
+- Repair actions write to the currently resolved Codex home. Surface the target
+  path or a reason code before telling users to repair a drifted Codex proxy.
+
 ---
 
 ## Internal Gateway Helper Traffic
