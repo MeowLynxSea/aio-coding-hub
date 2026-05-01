@@ -119,7 +119,7 @@ fn build_probe_request(
             headers.insert("anthropic-version", HeaderValue::from_static("2023-06-01"));
             headers.insert("content-type", HeaderValue::from_static("application/json"));
             let body = serde_json::json!({
-                "model": "claude-sonnet-4-20250514",
+                "model": "claude-sonnet-4-6",
                 "max_tokens": 1,
                 "messages": [{"role": "user", "content": "ping"}]
             });
