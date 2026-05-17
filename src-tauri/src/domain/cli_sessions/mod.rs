@@ -10,7 +10,7 @@ pub use types::{
 };
 
 use crate::shared::error::{AppError, AppResult};
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -55,6 +55,93 @@ const MAX_PAGE_SIZE: usize = 200;
 fn normalize_page_size(raw: usize) -> usize {
     let v = if raw == 0 { DEFAULT_PAGE_SIZE } else { raw };
     v.clamp(1, MAX_PAGE_SIZE)
+}
+
+pub(super) struct MessagePageAccumulator {
+    page: usize,
+    page_size: usize,
+    from_end: bool,
+    total: usize,
+    page_messages: Vec<CliSessionsDisplayMessage>,
+    tail_messages: VecDeque<CliSessionsDisplayMessage>,
+    tail_capacity: usize,
+}
+
+impl MessagePageAccumulator {
+    pub(super) fn new(page: usize, page_size: usize, from_end: bool) -> Self {
+        let tail_capacity = if from_end {
+            page.saturating_add(1).saturating_mul(page_size)
+        } else {
+            0
+        };
+
+        Self {
+            page,
+            page_size,
+            from_end,
+            total: 0,
+            page_messages: Vec::with_capacity(page_size.min(MAX_PAGE_SIZE)),
+            tail_messages: VecDeque::with_capacity(tail_capacity.min(MAX_PAGE_SIZE)),
+            tail_capacity,
+        }
+    }
+
+    pub(super) fn push(&mut self, message: CliSessionsDisplayMessage) {
+        if self.from_end {
+            if self.tail_capacity > 0 {
+                if self.tail_messages.len() == self.tail_capacity {
+                    self.tail_messages.pop_front();
+                }
+                self.tail_messages.push_back(message);
+            }
+        } else {
+            let start = self.page.saturating_mul(self.page_size);
+            let end = start.saturating_add(self.page_size);
+            if self.total >= start && self.total < end {
+                self.page_messages.push(message);
+            }
+        }
+
+        self.total = self.total.saturating_add(1);
+    }
+
+    pub(super) fn finish(self) -> CliSessionsPaginatedMessages {
+        if !self.from_end {
+            let next_start = self.page.saturating_add(1).saturating_mul(self.page_size);
+            return CliSessionsPaginatedMessages {
+                messages: self.page_messages,
+                total: self.total,
+                page: self.page,
+                page_size: self.page_size,
+                has_more: self.total > next_start,
+            };
+        }
+
+        let end = self
+            .total
+            .saturating_sub(self.page.saturating_mul(self.page_size));
+        let start = end.saturating_sub(self.page_size);
+        let has_more = start > 0;
+        let tail_start = self.total.saturating_sub(self.tail_messages.len());
+
+        let messages = if start < end && start >= tail_start {
+            self.tail_messages
+                .into_iter()
+                .skip(start - tail_start)
+                .take(end - start)
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        CliSessionsPaginatedMessages {
+            messages,
+            total: self.total,
+            page: self.page,
+            page_size: self.page_size,
+            has_more,
+        }
+    }
 }
 
 pub fn projects_list(
@@ -256,6 +343,51 @@ mod tests {
     use super::*;
     use std::fs;
     use std::path::PathBuf;
+
+    fn test_message(role: &str) -> CliSessionsDisplayMessage {
+        CliSessionsDisplayMessage {
+            uuid: None,
+            role: role.to_string(),
+            timestamp: None,
+            model: None,
+            content: vec![CliSessionsDisplayContentBlock::Text {
+                text: role.to_string(),
+            }],
+        }
+    }
+
+    fn collect_roles(page: CliSessionsPaginatedMessages) -> Vec<String> {
+        page.messages
+            .into_iter()
+            .map(|message| message.role)
+            .collect()
+    }
+
+    #[test]
+    fn message_page_accumulator_keeps_only_forward_page() {
+        let mut acc = MessagePageAccumulator::new(1, 2, false);
+        for role in ["m0", "m1", "m2", "m3", "m4"] {
+            acc.push(test_message(role));
+        }
+
+        let page = acc.finish();
+        assert_eq!(page.total, 5);
+        assert!(page.has_more);
+        assert_eq!(collect_roles(page), vec!["m2", "m3"]);
+    }
+
+    #[test]
+    fn message_page_accumulator_keeps_requested_tail_window() {
+        let mut acc = MessagePageAccumulator::new(1, 2, true);
+        for role in ["m0", "m1", "m2", "m3", "m4"] {
+            acc.push(test_message(role));
+        }
+
+        let page = acc.finish();
+        assert_eq!(page.total, 5);
+        assert!(page.has_more);
+        assert_eq!(collect_roles(page), vec!["m1", "m2"]);
+    }
 
     #[test]
     fn test_validate_path_under_root_valid() {

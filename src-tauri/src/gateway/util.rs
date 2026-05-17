@@ -8,11 +8,28 @@ use std::io::Read;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Hard cap on request body size read into memory. Exists **only** to bound
-/// gateway memory usage (we clone the full body per failover retry); it is not
-/// a product-level limit. Chosen to be large enough that normal AI CLI traffic
-/// — including image uploads, PDFs, long histories — never hits it.
-pub(super) const MAX_REQUEST_BODY_BYTES: usize = 500 * 1024 * 1024;
+/// Default hard cap on request body size read into memory. The gateway keeps a
+/// full body buffer for failover and request transforms, so the default should
+/// be high enough for normal AI CLI traffic while still preventing accidental
+/// desktop-scale memory spikes. Override with `AIO_GATEWAY_MAX_REQUEST_BODY_MB`.
+const DEFAULT_MAX_REQUEST_BODY_MB: usize = 128;
+const MIN_REQUEST_BODY_MB: usize = 1;
+const MAX_REQUEST_BODY_MB: usize = 500;
+
+fn parse_request_body_limit_mb(raw: Option<&str>) -> usize {
+    raw.and_then(|value| value.trim().parse::<usize>().ok())
+        .unwrap_or(DEFAULT_MAX_REQUEST_BODY_MB)
+        .clamp(MIN_REQUEST_BODY_MB, MAX_REQUEST_BODY_MB)
+}
+
+pub(super) fn max_request_body_bytes() -> usize {
+    parse_request_body_limit_mb(
+        std::env::var("AIO_GATEWAY_MAX_REQUEST_BODY_MB")
+            .ok()
+            .as_deref(),
+    )
+    .saturating_mul(1024 * 1024)
+}
 
 /// Diagnostic threshold (not a rejection limit). When a request body is larger
 /// than this AND the `model` field cannot be inferred from body/query/path,
@@ -437,8 +454,28 @@ pub(super) fn ensure_cli_required_headers(cli_key: &str, headers: &mut HeaderMap
 mod tests {
     use super::{
         compute_request_fingerprint, inject_provider_auth, normalize_query_for_fingerprint,
+        parse_request_body_limit_mb, DEFAULT_MAX_REQUEST_BODY_MB, MAX_REQUEST_BODY_MB,
+        MIN_REQUEST_BODY_MB,
     };
     use axum::http::{header, HeaderMap};
+
+    #[test]
+    fn request_body_limit_uses_default_and_clamps_env_values() {
+        assert_eq!(
+            parse_request_body_limit_mb(None),
+            DEFAULT_MAX_REQUEST_BODY_MB
+        );
+        assert_eq!(parse_request_body_limit_mb(Some("0")), MIN_REQUEST_BODY_MB);
+        assert_eq!(
+            parse_request_body_limit_mb(Some("9999")),
+            MAX_REQUEST_BODY_MB
+        );
+        assert_eq!(parse_request_body_limit_mb(Some("64")), 64);
+        assert_eq!(
+            parse_request_body_limit_mb(Some("not-a-number")),
+            DEFAULT_MAX_REQUEST_BODY_MB
+        );
+    }
 
     #[test]
     fn normalize_query_sorts_unique_key_pairs() {

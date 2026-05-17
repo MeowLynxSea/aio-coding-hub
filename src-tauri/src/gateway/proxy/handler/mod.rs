@@ -376,9 +376,10 @@ mod tests {
 
     #[test]
     fn body_too_large_message_includes_prefix_and_error() {
-        let message = body_too_large_message("stream exceeded limit");
+        let message = body_too_large_message("stream exceeded limit", 64 * 1024 * 1024);
         assert!(message.contains("failed to read request body:"));
         assert!(message.contains("stream exceeded limit"));
+        assert!(message.contains("64 MB"));
     }
 
     #[test]

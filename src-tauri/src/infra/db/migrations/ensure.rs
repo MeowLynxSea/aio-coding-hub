@@ -626,6 +626,26 @@ CREATE INDEX IF NOT EXISTS idx_request_logs_provider_success_cost
     )
     .map_err(|e| format!("failed to create idx_request_logs_provider_success_cost: {e}"))?;
 
+    // Index 3: Request log pages sort by created_at_ms DESC, id DESC. Keep
+    // path in the key for Claude's visible `/v1/messages` filter.
+    tx.execute_batch(
+        r#"
+CREATE INDEX IF NOT EXISTS idx_request_logs_cli_path_created_at_ms_id
+  ON request_logs(cli_key, path, created_at_ms DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_request_logs_cli_created_at_ms_id
+  ON request_logs(cli_key, created_at_ms DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_request_logs_visible_created_at_ms_id
+  ON request_logs(created_at_ms DESC, id DESC)
+  WHERE cli_key != 'claude' OR path = '/v1/messages';
+
+CREATE INDEX IF NOT EXISTS idx_request_logs_cli_id
+  ON request_logs(cli_key, id);
+"#,
+    )
+    .map_err(|e| format!("failed to create request log list indexes: {e}"))?;
+
     tx.commit()
         .map_err(|e| format!("failed to commit sqlite transaction: {e}"))?;
     Ok(())
