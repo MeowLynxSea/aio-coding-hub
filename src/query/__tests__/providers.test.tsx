@@ -12,6 +12,7 @@ import {
   providersList,
   providersReorder,
 } from "../../services/providers/providers";
+import { gatewayCircuitResetProvider } from "../../services/gateway/gateway";
 import {
   fetchProviderOAuthStatus,
   readProviderOAuthLimitsCache,
@@ -45,6 +46,16 @@ vi.mock("../../services/providers/providers", async () => {
     providerTestAvailability: vi.fn(),
     providersReorder: vi.fn(),
     providerClaudeTerminalLaunchCommand: vi.fn(),
+  };
+});
+
+vi.mock("../../services/gateway/gateway", async () => {
+  const actual = await vi.importActual<typeof import("../../services/gateway/gateway")>(
+    "../../services/gateway/gateway"
+  );
+  return {
+    ...actual,
+    gatewayCircuitResetProvider: vi.fn(),
   };
 });
 
@@ -241,6 +252,7 @@ describe("query/providers", () => {
 
     await expect(refreshProviderOAuthLimits(client, 11)).resolves.toEqual(limits);
     await expect(refreshProviderOAuthLimits(client, 0)).rejects.toThrow("SEC_INVALID_INPUT");
+    expect(gatewayCircuitResetProvider).not.toHaveBeenCalled();
 
     const wrapper = createQueryWrapper(client);
     const { result } = renderHook(() => useOAuthLimitsQuery(11, true), { wrapper });
@@ -254,6 +266,66 @@ describe("query/providers", () => {
     expect(() => renderHook(() => useOAuthLimitsQuery(0, false), { wrapper })).toThrow(
       "SEC_INVALID_INPUT"
     );
+  });
+
+  it("active OAuth limits refresh resets circuit after every successful refresh", async () => {
+    setTauriRuntime();
+
+    const availableLimits = {
+      limit_short_label: "5h",
+      limit_5h_text: "12%",
+      limit_weekly_text: null,
+      limit_5h_reset_at: null,
+      limit_weekly_reset_at: null,
+    };
+    vi.mocked(providerOAuthFetchLimits).mockResolvedValueOnce(availableLimits);
+    vi.mocked(gatewayCircuitResetProvider).mockResolvedValue(true);
+
+    const client = createTestQueryClient();
+
+    await expect(
+      refreshProviderOAuthLimits(client, 11, { resetCircuitAfterRefresh: true })
+    ).resolves.toEqual(availableLimits);
+
+    expect(gatewayCircuitResetProvider).toHaveBeenCalledWith(11);
+
+    vi.mocked(gatewayCircuitResetProvider).mockClear();
+    vi.mocked(providerOAuthFetchLimits).mockResolvedValueOnce({
+      limit_short_label: "5h",
+      limit_5h_text: "0%",
+      limit_weekly_text: null,
+      limit_5h_reset_at: 1_700_100_000,
+      limit_weekly_reset_at: null,
+    });
+
+    await expect(
+      refreshProviderOAuthLimits(client, 11, { resetCircuitAfterRefresh: true })
+    ).resolves.toMatchObject({ limit_5h_text: "0%" });
+
+    expect(gatewayCircuitResetProvider).toHaveBeenCalledWith(11);
+  });
+
+  it("active OAuth limits refresh keeps refreshed limits when circuit reset fails", async () => {
+    setTauriRuntime();
+
+    const limits = {
+      limit_short_label: "5h",
+      limit_5h_text: "24%",
+      limit_weekly_text: null,
+      limit_5h_reset_at: null,
+      limit_weekly_reset_at: null,
+    };
+    vi.mocked(providerOAuthFetchLimits).mockResolvedValueOnce(limits);
+    vi.mocked(gatewayCircuitResetProvider).mockRejectedValueOnce(new Error("reset boom"));
+
+    const client = createTestQueryClient();
+
+    await expect(
+      refreshProviderOAuthLimits(client, 11, { resetCircuitAfterRefresh: true })
+    ).resolves.toEqual(limits);
+
+    expect(gatewayCircuitResetProvider).toHaveBeenCalledWith(11);
+    expect(client.getQueryData(oauthLimitsKeys.detail(11))).toEqual(limits);
   });
 
   it("useProviderSetEnabledMutation updates cached providers list", async () => {

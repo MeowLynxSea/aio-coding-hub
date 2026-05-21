@@ -5,13 +5,14 @@ import {
   type ReactNode,
 } from "react";
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Copy, FlaskConical, Pencil, RefreshCw, Terminal, Trash2, Zap } from "lucide-react";
 import { FREE_TAG } from "../../constants/providers";
 import type { GatewayProviderCircuitStatus } from "../../services/gateway/gateway";
 import { getGatewayCircuitDerivedState } from "../../query/gateway";
-import { useOAuthLimitsQuery } from "../../query/providers";
+import { refreshProviderOAuthLimits, useOAuthLimitsQuery } from "../../query/providers";
 import {
   getProviderTypeInfo,
   type ClaudeModels,
@@ -186,11 +187,13 @@ export const ProviderCard = memo(function ProviderCard({
   const { isUnavailable, unavailableUntil } = circuitState;
   const { isOAuth, isCx2cc, isCx2ccGateway } = getProviderTypeInfo(provider);
   const [apiKeyDetailsVisible, setApiKeyDetailsVisible] = useState(false);
-  const {
-    data: oauthLimits = null,
-    isLoading: limitsLoading,
-    refetch: refetchOAuthLimits,
-  } = useOAuthLimitsQuery(provider.id, isOAuth);
+  const [limitsRefreshing, setLimitsRefreshing] = useState(false);
+  const queryClient = useQueryClient();
+  const { data: oauthLimits = null, isLoading: limitsQueryLoading } = useOAuthLimitsQuery(
+    provider.id,
+    isOAuth
+  );
+  const limitsLoading = limitsQueryLoading || limitsRefreshing;
   const oauthShortLabel = getOAuthShortWindowLabel(provider, oauthLimits);
   const shouldTrackNowUnix =
     isUnavailable ||
@@ -274,7 +277,13 @@ export const ProviderCard = memo(function ProviderCard({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  refetchOAuthLimits();
+                  if (limitsRefreshing) return;
+                  setLimitsRefreshing(true);
+                  void refreshProviderOAuthLimits(queryClient, provider.id, {
+                    resetCircuitAfterRefresh: true,
+                  })
+                    .catch(() => {})
+                    .finally(() => setLimitsRefreshing(false));
                 }}
                 disabled={limitsLoading}
                 className={cn(

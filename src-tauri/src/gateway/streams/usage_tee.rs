@@ -10,7 +10,9 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use super::super::events::{emit_gateway_debug_log, emit_gateway_debug_log_lazy};
-use super::super::proxy::{is_fake_200_non_stream_body, GatewayErrorCode};
+use super::super::proxy::{
+    is_fake_200_non_stream_body, upstream_client_error_rules, GatewayErrorCode,
+};
 use super::super::util::{lossy_utf8_preview, now_unix_seconds, MAX_DEBUG_BODY_PREVIEW_BYTES};
 use super::request_end::{emit_request_event_and_spawn_request_log, StreamRequestCompletion};
 use super::{RelayBodyStream, StreamFinalizeCtx};
@@ -685,6 +687,8 @@ where
         };
         if effective_error_code == Some(GatewayErrorCode::Fake200.as_str()) {
             self.ctx.fake_200_detected = true;
+            self.ctx.fake_200_quota_exhausted =
+                upstream_client_error_rules::match_quota_exhausted(&self.buffer);
         }
 
         let usage = if self.truncated || self.buffer.is_empty() {
@@ -854,7 +858,9 @@ mod tests {
             provider_id: 1,
             provider_name: "test-provider".to_string(),
             base_url: "https://upstream.example".to_string(),
+            auth_mode: "api_key".to_string(),
             fake_200_detected: false,
+            fake_200_quota_exhausted: false,
         }
     }
 

@@ -363,7 +363,9 @@ pub(super) fn gate_provider<R: tauri::Runtime>(input: ProviderLimitsInput<'_, R>
         skipped_limits,
     } = input;
 
-    if !has_any_limit(provider) {
+    let has_oauth_quota_gate = provider.auth_mode == "oauth";
+    let has_spend_limit = has_any_limit(provider);
+    if !has_oauth_quota_gate && !has_spend_limit {
         return true;
     }
 
@@ -374,6 +376,30 @@ pub(super) fn gate_provider<R: tauri::Runtime>(input: ProviderLimitsInput<'_, R>
 
     let now_unix = ctx.created_at;
     let end_unix = now_unix.saturating_add(1);
+
+    if has_oauth_quota_gate {
+        match crate::domain::provider_oauth_limits::gate_snapshot(&conn, provider.id, now_unix) {
+            Ok(crate::domain::provider_oauth_limits::OAuthLimitGate::Allow) => {}
+            Ok(crate::domain::provider_oauth_limits::OAuthLimitGate::Limited { reset_at }) => {
+                *skipped_limits = skipped_limits.saturating_add(1);
+                if let Some(reset_at) = reset_at {
+                    update_earliest(earliest_available_unix, reset_at);
+                }
+                return false;
+            }
+            Err(err) => {
+                tracing::warn!(
+                    provider_id = provider.id,
+                    provider_name = %provider.name,
+                    "failed to gate OAuth provider quota snapshot: {err}"
+                );
+            }
+        }
+    }
+
+    if !has_spend_limit {
+        return true;
+    }
 
     // Use fixed window for 5h limit
     let start_5h = if provider.limit_5h_usd.is_some() {

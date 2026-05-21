@@ -185,6 +185,7 @@ pub(super) struct ProviderCtx<'a> {
     pub(super) provider_id: i64,
     pub(super) provider_name_base: &'a String,
     pub(super) provider_base_url_base: &'a String,
+    pub(super) auth_mode: &'a str,
     pub(super) provider_index: u32,
     pub(super) session_reuse: Option<bool>,
     pub(super) stream_idle_timeout_seconds: Option<u32>,
@@ -195,6 +196,7 @@ pub(super) struct ProviderCtxOwned {
     pub(super) provider_id: i64,
     pub(super) provider_name_base: String,
     pub(super) provider_base_url_base: String,
+    pub(super) auth_mode: String,
     pub(super) provider_index: u32,
     pub(super) session_reuse: Option<bool>,
     pub(super) stream_idle_timeout_seconds: Option<u32>,
@@ -206,6 +208,7 @@ impl<'a> From<ProviderCtx<'a>> for ProviderCtxOwned {
             provider_id: ctx.provider_id,
             provider_name_base: ctx.provider_name_base.clone(),
             provider_base_url_base: ctx.provider_base_url_base.clone(),
+            auth_mode: ctx.auth_mode.to_string(),
             provider_index: ctx.provider_index,
             session_reuse: ctx.session_reuse,
             stream_idle_timeout_seconds: ctx.stream_idle_timeout_seconds,
@@ -252,7 +255,9 @@ pub(super) fn build_stream_finalize_ctx<R: tauri::Runtime>(
         provider_id: provider_ctx.provider_id,
         provider_name: provider_ctx.provider_name_base.clone(),
         base_url: provider_ctx.provider_base_url_base.clone(),
+        auth_mode: provider_ctx.auth_mode.clone(),
         fake_200_detected: false,
+        fake_200_quota_exhausted: false,
     }
 }
 

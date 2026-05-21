@@ -12,6 +12,7 @@ pub(super) fn apply_ensure_patches(conn: &mut Connection) -> crate::shared::erro
     ensure_workspace_cluster(conn)?;
     ensure_provider_limits(conn)?;
     ensure_provider_oauth_columns(conn)?;
+    ensure_provider_oauth_limit_snapshots(conn)?;
     ensure_sort_mode_providers_enabled(conn)?;
     ensure_usage_indexes(conn)?;
     ensure_provider_tags(conn)?;
@@ -521,6 +522,27 @@ WHERE oauth_refresh_lead_s IS NULL OR oauth_refresh_lead_s <= 0;
     tx.commit()
         .map_err(|e| format!("failed to commit sqlite transaction: {e}"))?;
     Ok(())
+}
+
+fn ensure_provider_oauth_limit_snapshots(conn: &Connection) -> crate::shared::error::AppResult<()> {
+    conn.execute_batch(
+        r#"
+CREATE TABLE IF NOT EXISTS provider_oauth_limit_snapshots (
+  provider_id INTEGER PRIMARY KEY,
+  limit_short_label TEXT,
+  limit_5h_text TEXT,
+  limit_weekly_text TEXT,
+  limit_5h_reset_at INTEGER,
+  limit_weekly_reset_at INTEGER,
+  checked_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY(provider_id) REFERENCES providers(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_provider_oauth_limit_snapshots_checked_at
+  ON provider_oauth_limit_snapshots(checked_at);
+"#,
+    )
+    .map_err(|e| format!("failed to ensure provider OAuth limit snapshots table: {e}").into())
 }
 
 // ---------------------------------------------------------------------------

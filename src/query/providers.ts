@@ -19,6 +19,9 @@ import {
   validateProviderCliKey,
   validateProviderId,
 } from "../services/providers/providers";
+import { logToConsole } from "../services/consoleLog";
+import { gatewayCircuitResetProvider } from "../services/gateway/gateway";
+import { formatUnknownError } from "../utils/errors";
 import { gatewayKeys, oauthLimitsKeys, providersKeys } from "./keys";
 
 export function useProvidersListQuery(cliKey: CliKey, options?: { enabled?: boolean }) {
@@ -89,13 +92,28 @@ export function readProviderOAuthLimitsCache(
 
 export async function refreshProviderOAuthLimits(
   queryClient: QueryClient,
-  providerId: number
+  providerId: number,
+  options?: { resetCircuitAfterRefresh?: boolean }
 ): Promise<OAuthLimitsResult> {
   const normalizedProviderId = validateProviderId(providerId);
   const next = normalizeProviderOAuthLimitsResult(
     await providerOAuthFetchLimits(normalizedProviderId)
   );
   queryClient.setQueryData(oauthLimitsKeys.detail(normalizedProviderId), next);
+  try {
+    if (options?.resetCircuitAfterRefresh) {
+      try {
+        await gatewayCircuitResetProvider(normalizedProviderId);
+      } catch (error) {
+        logToConsole("warn", "OAuth 配额刷新成功，但重置熔断器失败", {
+          provider_id: normalizedProviderId,
+          error: formatUnknownError(error),
+        });
+      }
+    }
+  } finally {
+    void queryClient.invalidateQueries({ queryKey: gatewayKeys.circuits() });
+  }
   return next;
 }
 

@@ -1,6 +1,7 @@
 //! Usage: Handle successful non-SSE upstream responses inside `failover_loop::run`.
 
 use super::*;
+use crate::domain::provider_oauth_limits;
 use crate::gateway::proxy::{
     gemini_oauth, is_fake_200_non_stream_body, protocol_bridge, provider_router,
     upstream_client_error_rules, GatewayErrorCode,
@@ -911,6 +912,7 @@ where
         let duration_ms = started.elapsed().as_millis();
         let quota_exhausted =
             upstream_client_error_rules::match_quota_exhausted(body_bytes.as_ref());
+        let oauth_quota_exhausted = quota_exhausted && provider_ctx_owned.auth_mode == "oauth";
         let decision = if quota_exhausted {
             FailoverDecision::SwitchProvider
         } else {
@@ -933,26 +935,37 @@ where
         }
 
         let now_unix = now_unix_seconds() as i64;
-        let change = provider_router::record_failure_and_emit_transition(
-            provider_router::RecordCircuitArgs::from_state(
-                state,
-                common.trace_id.as_str(),
-                common.cli_key.as_str(),
-                provider_id,
-                provider_ctx_owned.provider_name_base.as_str(),
-                provider_ctx_owned.provider_base_url_base.as_str(),
-                now_unix,
-            ),
-        );
-        if let Some(last) = attempts.last_mut() {
-            last.circuit_state_after = Some(change.after.state.as_str());
-            last.circuit_failure_count = Some(change.after.failure_count);
-            last.circuit_failure_threshold = Some(change.after.failure_threshold);
+        if oauth_quota_exhausted {
+            if let Err(err) =
+                provider_oauth_limits::save_exhausted_snapshot(&state.db, provider_id, None)
+            {
+                tracing::warn!(
+                    provider_id,
+                    "failed to save OAuth exhausted quota snapshot: {err}"
+                );
+            }
+        } else {
+            let change = provider_router::record_failure_and_emit_transition(
+                provider_router::RecordCircuitArgs::from_state(
+                    state,
+                    common.trace_id.as_str(),
+                    common.cli_key.as_str(),
+                    provider_id,
+                    provider_ctx_owned.provider_name_base.as_str(),
+                    provider_ctx_owned.provider_base_url_base.as_str(),
+                    now_unix,
+                ),
+            );
+            if let Some(last) = attempts.last_mut() {
+                last.circuit_state_after = Some(change.after.state.as_str());
+                last.circuit_failure_count = Some(change.after.failure_count);
+                last.circuit_failure_threshold = Some(change.after.failure_threshold);
+            }
+            *circuit_snapshot = change.after.clone();
         }
-        *circuit_snapshot = change.after.clone();
 
         if quota_exhausted {
-            if common.provider_cooldown_secs > 0 {
+            if !oauth_quota_exhausted && common.provider_cooldown_secs > 0 {
                 let snap = provider_router::trigger_cooldown(
                     state.circuit.as_ref(),
                     provider_id,

@@ -216,6 +216,7 @@ fn build_provider_ctx(prepared: &PreparedProvider) -> ProviderCtx<'_> {
         provider_id: prepared.provider_id,
         provider_name_base: &prepared.provider_name_base,
         provider_base_url_base: &prepared.provider_base_url_base,
+        auth_mode: prepared.auth_mode.as_str(),
         provider_index: prepared.provider_index,
         session_reuse: prepared.session_reuse,
         stream_idle_timeout_seconds: prepared.stream_idle_timeout_seconds,

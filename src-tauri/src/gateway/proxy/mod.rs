@@ -22,7 +22,7 @@ mod request_context;
 mod request_end;
 pub(in crate::gateway) mod status_override;
 mod types;
-mod upstream_client_error_rules;
+pub(in crate::gateway) mod upstream_client_error_rules;
 
 pub(super) use caches::{ProviderBaseUrlPingCache, RecentErrorCache};
 pub(super) use error_code::GatewayErrorCode;

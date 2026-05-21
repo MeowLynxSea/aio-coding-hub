@@ -15,6 +15,7 @@ use super::{
     RequestEndArgs, RequestEndContextArgs, RequestEndDeps,
 };
 use crate::circuit_breaker;
+use crate::domain::provider_oauth_limits;
 use crate::gateway::events::decision_chain as dc;
 use crate::gateway::events::FailoverAttempt;
 use crate::gateway::proxy::errors::{
@@ -114,6 +115,36 @@ fn error_body_scan_limit_bytes() -> u64 {
 
 pub(super) fn error_body_scan_limit_usize() -> usize {
     error_body_scan_limit_bytes().min(usize::MAX as u64) as usize
+}
+
+fn retry_after_reset_at(headers: &axum::http::HeaderMap, now_unix: i64) -> Option<i64> {
+    headers
+        .get(header::RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .and_then(|value| {
+            if let Ok(seconds) = value.parse::<i64>() {
+                return (seconds > 0).then_some(now_unix.saturating_add(seconds));
+            }
+            chrono::DateTime::parse_from_rfc2822(value)
+                .ok()
+                .map(|value| value.timestamp())
+                .filter(|timestamp| *timestamp > 0)
+        })
+}
+
+fn save_oauth_quota_exhausted_snapshot(
+    db: &crate::db::Db,
+    provider_id: i64,
+    reset_at: Option<i64>,
+) {
+    if let Err(err) = provider_oauth_limits::save_exhausted_snapshot(db, provider_id, reset_at) {
+        tracing::warn!(
+            provider_id,
+            "failed to save OAuth exhausted quota snapshot: {err}"
+        );
+    }
 }
 
 pub(super) async fn read_response_body_for_error_scan(
@@ -265,6 +296,7 @@ pub(super) async fn handle_non_success_response<R: tauri::Runtime>(
         provider_id,
         provider_name_base,
         provider_base_url_base,
+        auth_mode,
         provider_index,
         session_reuse,
         ..
@@ -434,13 +466,25 @@ pub(super) async fn handle_non_success_response<R: tauri::Runtime>(
         }
     }
 
+    let oauth_quota_exhausted = auth_mode == "oauth" && matched_rule_id == Some("quota_exhausted");
     let mut circuit_state_before = Some(circuit_before.state.as_str());
     let mut circuit_state_after: Option<&'static str> = None;
     let mut circuit_failure_count = Some(circuit_before.failure_count);
     let circuit_failure_threshold = Some(circuit_before.failure_threshold);
 
     let now_unix = now_unix_seconds() as i64;
-    if !is_count_tokens && matches!(category, ErrorCategory::ProviderError) {
+    if oauth_quota_exhausted {
+        save_oauth_quota_exhausted_snapshot(
+            &state.db,
+            provider_id,
+            retry_after_reset_at(&response_headers, now_unix),
+        );
+    }
+
+    if !is_count_tokens
+        && matches!(category, ErrorCategory::ProviderError)
+        && !oauth_quota_exhausted
+    {
         let change = provider_router::record_failure_and_emit_transition(
             provider_router::RecordCircuitArgs::from_state(
                 state,
@@ -465,6 +509,7 @@ pub(super) async fn handle_non_success_response<R: tauri::Runtime>(
     if !is_count_tokens
         && provider_cooldown_secs > 0
         && matches!(category, ErrorCategory::ProviderError)
+        && !oauth_quota_exhausted
         && matches!(
             decision,
             FailoverDecision::SwitchProvider | FailoverDecision::Abort
@@ -780,10 +825,11 @@ mod tests {
     use super::{
         error_body_scan_limit_usize, matches_codex_previous_response_id_error,
         read_response_body_for_error_scan, remove_codex_previous_response_id,
-        reqwest_error_decision, should_scan_codex_previous_response_id_error,
+        reqwest_error_decision, retry_after_reset_at, should_scan_codex_previous_response_id_error,
         upstream_error_decision, FailoverDecision,
     };
     use axum::body::Bytes;
+    use axum::http::{header, HeaderMap, HeaderValue};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
@@ -857,6 +903,25 @@ mod tests {
 
         assert_eq!(body.len(), limit);
         assert!(body.iter().all(|byte| *byte == b'x'));
+    }
+
+    #[test]
+    fn retry_after_reset_at_accepts_delta_seconds() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::RETRY_AFTER, HeaderValue::from_static("120"));
+
+        assert_eq!(retry_after_reset_at(&headers, 1_000), Some(1_120));
+    }
+
+    #[test]
+    fn retry_after_reset_at_accepts_http_date() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::RETRY_AFTER,
+            HeaderValue::from_static("Wed, 21 Oct 2015 07:28:00 GMT"),
+        );
+
+        assert_eq!(retry_after_reset_at(&headers, 1_000), Some(1_445_412_480));
     }
 
     #[test]

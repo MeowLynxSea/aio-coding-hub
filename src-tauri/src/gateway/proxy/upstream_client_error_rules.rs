@@ -84,7 +84,7 @@ pub(super) fn match_429_concurrency_limit(body: &[u8]) -> bool {
 }
 
 /// Returns whether a response body clearly indicates account/provider quota exhaustion.
-pub(super) fn match_quota_exhausted(body: &[u8]) -> bool {
+pub(in crate::gateway) fn match_quota_exhausted(body: &[u8]) -> bool {
     if body.is_empty() {
         return false;
     }
