@@ -271,7 +271,7 @@ export function SettingsMainColumn({
           <div className="grid gap-6 xl:grid-cols-2 xl:items-start">
             {/* 系统设置 */}
             <div className="rounded-2xl border border-line-subtle bg-surface-inset p-4">
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 系统设置
               </h3>
               <div className="space-y-1">
@@ -359,7 +359,7 @@ export function SettingsMainColumn({
 
             {/* 系统通知 */}
             <div className="rounded-2xl border border-line-subtle bg-surface-inset p-4">
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 系统通知
               </h3>
               <div className="space-y-1">
@@ -412,7 +412,7 @@ export function SettingsMainColumn({
 
           {/* UI 偏好 */}
           <div className="rounded-2xl border border-line-subtle bg-surface-inset p-4">
-            <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               UI 偏好
             </h3>
             <div className="space-y-1">

@@ -166,7 +166,7 @@
     --color-border-light: rgba(255, 255, 255, 0.01);
   }
 
-  /* Base typography for outstanding and bold module titles & headings */
+  /* Base heading family/color only; explicit Tailwind classes own size and weight. */
   h1,
   h2,
   h3,
@@ -174,13 +174,7 @@
   h5,
   h6 {
     font-family: "Plus Jakarta Sans", "DM Sans", ui-sans-serif, system-ui, sans-serif;
-    font-weight: 700 !important;
-    letter-spacing: -0.025em;
     color: hsl(var(--foreground));
-  }
-
-  h1 {
-    font-weight: 800 !important;
   }
 }
 

@@ -207,6 +207,9 @@ Tailwind size, weight, and semantic text color.
 - Do not introduce viewport-scaled font sizes, negative letter spacing, or
   arbitrary typography values in feature code. Existing public primitives own
   any exceptions needed for the current design system.
+- Global CSS may set heading font family and semantic color, but must not force
+  heading `font-weight`, `letter-spacing`, or size. Page and component classes
+  own those values so `PageHeader` and module-title standards remain effective.
 - Title text must fit the surface: use `min-w-0`, `truncate`, `break-words`, or
   responsive wrapping where long provider/model/workspace names can appear.
 
