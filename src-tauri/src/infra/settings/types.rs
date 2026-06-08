@@ -162,12 +162,18 @@ pub struct AppSettings {
     // (passthrough), requests are forwarded to the upstream provider as-is.
     // When `true` (force_replace), the gateway detects Claude Code's
     // WebSearchTool sub-call and answers it locally using a configured
-    // `SearchBackend` (Brave / Tavily / LLM-backed). See
+    // `SearchBackend` (Brave / Tavily / Metaso / LLM-backed). See
     // `crate::gateway::web_search` for details.
     pub intercept_web_search: bool,
     pub web_search_backend_kind: crate::gateway::web_search::backend::SearchBackendKind,
     pub web_search_brave_api_key: String,
     pub web_search_tavily_api_key: String,
+    pub web_search_metaso_api_key: String,
+    /// Ask the Metaso backend to include its AI-generated `summary` field
+    /// on each hit (richer, but more tokens / cost).
+    pub web_search_metaso_include_summary: bool,
+    /// Ask the Metaso backend to return a shorter `snippet` field.
+    pub web_search_metaso_concise_snippet: bool,
     pub web_search_max_results: u32,
     /// Provider id used by the LLM-backed backend. `None` disables that
     /// backend kind until the user picks a provider.
@@ -244,9 +250,13 @@ impl Default for AppSettings {
             upstream_proxy_username: String::new(),
             upstream_proxy_password: String::new(),
             intercept_web_search: DEFAULT_INTERCEPT_WEB_SEARCH,
-            web_search_backend_kind: crate::gateway::web_search::backend::SearchBackendKind::default(),
+            web_search_backend_kind:
+                crate::gateway::web_search::backend::SearchBackendKind::default(),
             web_search_brave_api_key: String::new(),
             web_search_tavily_api_key: String::new(),
+            web_search_metaso_api_key: String::new(),
+            web_search_metaso_include_summary: DEFAULT_WEB_SEARCH_METASO_INCLUDE_SUMMARY,
+            web_search_metaso_concise_snippet: DEFAULT_WEB_SEARCH_METASO_CONCISE_SNIPPET,
             web_search_max_results: DEFAULT_WEB_SEARCH_MAX_RESULTS,
             web_search_llm_provider_id: None,
         }

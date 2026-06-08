@@ -7,4 +7,5 @@
 
 pub mod brave;
 pub mod llm_backed;
+pub mod metaso;
 pub mod tavily;

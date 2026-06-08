@@ -82,8 +82,8 @@ pub fn build_search_success_response(
 
     // ── content_block_delta: input_json_delta ────────────────────────────
     // The model receives this as a synthetic "tool call" with the user query.
-    let partial = serde_json::to_string(&json!({ "query": query }))
-        .expect("static query object serializes");
+    let partial =
+        serde_json::to_string(&json!({ "query": query })).expect("static query object serializes");
     write_event(
         &mut out,
         "content_block_delta",
@@ -216,8 +216,8 @@ pub fn build_search_error_response(
         }),
     );
 
-    let partial = serde_json::to_string(&json!({ "query": query }))
-        .expect("static query object serializes");
+    let partial =
+        serde_json::to_string(&json!({ "query": query })).expect("static query object serializes");
     write_event(
         &mut out,
         "content_block_delta",
@@ -349,19 +349,16 @@ mod tests {
 
     #[test]
     fn error_response_uses_error_block() {
-        let body = build_search_error_response(
-            "claude-sonnet-4-5",
-            "abc123",
-            "rust",
-            "too_many_requests",
-        );
+        let body =
+            build_search_error_response("claude-sonnet-4-5", "abc123", "rust", "too_many_requests");
         assert!(body.contains("web_search_tool_result_error"));
         assert!(body.contains("too_many_requests"));
     }
 
     #[test]
     fn empty_hits_still_emits_a_result_block() {
-        let body = build_search_success_response("claude-sonnet-4-5", "tid", "no results query", &[]);
+        let body =
+            build_search_success_response("claude-sonnet-4-5", "tid", "no results query", &[]);
         // An empty result block is still emitted so the parser sees the
         // server_tool_use → web_search_tool_result pairing.
         assert!(body.contains("\"type\":\"web_search_tool_result\""));

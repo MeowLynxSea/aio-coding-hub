@@ -5,7 +5,9 @@
 //!
 //! Reference: <https://api.search.brave.com/app/documentation/web-search/get-started>
 
-use crate::gateway::web_search::backend::{SearchError, SearchHit, SearchOptions, DEFAULT_SEARCH_TIMEOUT};
+use crate::gateway::web_search::backend::{
+    SearchError, SearchHit, SearchOptions, DEFAULT_SEARCH_TIMEOUT,
+};
 use serde::Deserialize;
 use std::time::Duration;
 
@@ -32,17 +34,13 @@ impl BraveSearchBackend {
         self
     }
 
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
-        self
-    }
-
     fn build_client(&self) -> Result<reqwest::Client, SearchError> {
         let mut builder = reqwest::Client::builder().timeout(self.timeout);
         if let Some(proxy) = self.proxy_url.as_deref().filter(|s| !s.is_empty()) {
-            let reqwest_proxy = reqwest::Proxy::all(proxy).map_err(|e| SearchError::InvalidConfig {
-                message: format!("invalid brave backend proxy url: {e}"),
-            })?;
+            let reqwest_proxy =
+                reqwest::Proxy::all(proxy).map_err(|e| SearchError::InvalidConfig {
+                    message: format!("invalid brave backend proxy url: {e}"),
+                })?;
             builder = builder.proxy(reqwest_proxy);
         }
         builder.build().map_err(|e| SearchError::Transport {
@@ -63,7 +61,7 @@ impl BraveSearchBackend {
         }
 
         let client = self.build_client()?;
-        let count = opts.max_results.clamp(1, 20) as u32;
+        let count = opts.max_results.max(1) as u32;
 
         // Brave does not have a direct `blocked_domains` param. Approximate it
         // by appending `-site:domain` to the query string.
@@ -99,7 +97,9 @@ impl BraveSearchBackend {
             .query(&params)
             .send()
             .await
-            .map_err(|e| SearchError::Transport { message: e.to_string() })?;
+            .map_err(|e| SearchError::Transport {
+                message: e.to_string(),
+            })?;
 
         let status = resp.status();
         if !status.is_success() {
@@ -225,13 +225,22 @@ mod tests {
 
     #[test]
     fn host_of_handles_common_shapes() {
-        assert_eq!(host_of("https://example.com/path"), Some("example.com".into()));
-        assert_eq!(host_of("https://www.example.com/"), Some("example.com".into()));
+        assert_eq!(
+            host_of("https://example.com/path"),
+            Some("example.com".into())
+        );
+        assert_eq!(
+            host_of("https://www.example.com/"),
+            Some("example.com".into())
+        );
         assert_eq!(
             host_of("https://api.search.brave.com/res/v1/web/search?q=hi"),
             Some("api.search.brave.com".into())
         );
-        assert_eq!(host_of("https://example.com:8080/x"), Some("example.com".into()));
+        assert_eq!(
+            host_of("https://example.com:8080/x"),
+            Some("example.com".into())
+        );
         assert_eq!(host_of("not a url"), None);
     }
 }

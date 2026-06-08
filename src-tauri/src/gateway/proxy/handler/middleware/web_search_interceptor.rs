@@ -16,9 +16,7 @@ use crate::gateway::proxy::request_end::{
 use crate::gateway::web_search::backend::{SearchBackendImpl, SearchError, SearchOptions};
 use crate::gateway::web_search::detection::detect_web_search_request;
 use crate::gateway::web_search::factory::build_backend;
-use crate::gateway::web_search::sse::{
-    build_search_error_response, build_search_success_response,
-};
+use crate::gateway::web_search::sse::{build_search_error_response, build_search_success_response};
 use crate::usage::UsageMetrics;
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -114,12 +112,8 @@ fn build_response_blocking<R: tauri::Runtime>(
 
             match result {
                 Ok(hits) => {
-                    let body = build_search_success_response(
-                        &requested_model,
-                        &trace_id,
-                        &query,
-                        &hits,
-                    );
+                    let body =
+                        build_search_success_response(&requested_model, &trace_id, &query, &hits);
                     let settings = web_search_special_settings_json(
                         "success",
                         ws.backend_settings.kind,
@@ -152,7 +146,9 @@ fn build_response_blocking<R: tauri::Runtime>(
                 }
                 Err(err) => {
                     let error_code = match &err {
-                        SearchError::Upstream { status, .. } if *status == 429 => "too_many_requests",
+                        SearchError::Upstream { status, .. } if *status == 429 => {
+                            "too_many_requests"
+                        }
                         SearchError::Upstream { status, .. } if *status >= 500 => "internal_error",
                         SearchError::InvalidConfig { .. } => "invalid_request_error",
                         SearchError::Transport { .. } => "network_error",
@@ -283,6 +279,7 @@ async fn run_search(
     match backend {
         SearchBackendImpl::Brave(b) => b.search(query, opts).await,
         SearchBackendImpl::Tavily(t) => t.search(query, opts).await,
+        SearchBackendImpl::Metaso(m) => m.search(query, opts).await,
         SearchBackendImpl::LlmBacked(l) => l.search(query, opts).await,
     }
 }
@@ -329,6 +326,9 @@ mod tests {
                 kind: SearchBackendKind::Brave,
                 brave_api_key: String::new(), // intentionally empty -> config error
                 tavily_api_key: String::new(),
+                metaso_api_key: String::new(),
+                metaso_include_summary: false,
+                metaso_concise_snippet: false,
                 max_results: 5,
                 llm_provider_id: None,
                 proxy_url: String::new(),
@@ -346,7 +346,10 @@ mod tests {
         );
         let value: serde_json::Value = serde_json::from_str(&json).expect("valid json");
         let row = value.as_array().unwrap().first().unwrap();
-        assert_eq!(row.get("type").and_then(|v| v.as_str()), Some("web_search_intercept"));
+        assert_eq!(
+            row.get("type").and_then(|v| v.as_str()),
+            Some("web_search_intercept")
+        );
         assert_eq!(row.get("scope").and_then(|v| v.as_str()), Some("request"));
         assert_eq!(row.get("hit").and_then(|v| v.as_bool()), Some(true));
         assert_eq!(row.get("outcome").and_then(|v| v.as_str()), Some("success"));

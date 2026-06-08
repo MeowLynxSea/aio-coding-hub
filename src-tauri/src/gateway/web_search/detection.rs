@@ -63,9 +63,8 @@ fn has_web_search_tool(body: &Value) -> bool {
     body.get("tools")
         .and_then(|t| t.as_array())
         .map(|arr| {
-            arr.iter().any(|t| {
-                t.get("type").and_then(|v| v.as_str()) == Some(WEB_SEARCH_TOOL_TYPE)
-            })
+            arr.iter()
+                .any(|t| t.get("type").and_then(|v| v.as_str()) == Some(WEB_SEARCH_TOOL_TYPE))
         })
         .unwrap_or(false)
 }
@@ -185,7 +184,10 @@ mod tests {
             ]
         });
         let det = detect_web_search_request(&body).unwrap();
-        assert_eq!(det.allowed_domains, vec!["anthropic.com", "docs.anthropic.com"]);
+        assert_eq!(
+            det.allowed_domains,
+            vec!["anthropic.com", "docs.anthropic.com"]
+        );
         assert_eq!(det.blocked_domains, vec!["example.com"]);
         assert_eq!(det.max_uses, 3);
     }

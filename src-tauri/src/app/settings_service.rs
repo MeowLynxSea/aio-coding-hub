@@ -118,6 +118,9 @@ pub(crate) struct SettingsUpdate {
     pub upstream_proxy_url: Option<String>,
     pub upstream_proxy_username: Option<String>,
     pub upstream_proxy_password: Option<SensitiveStringUpdate>,
+    pub web_search_backend_kind: Option<crate::gateway::web_search::backend::SearchBackendKind>,
+    pub web_search_max_results: Option<u32>,
+    pub web_search_llm_provider_id: Option<Option<i64>>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, specta::Type)]
@@ -194,6 +197,14 @@ pub(crate) struct SettingsView {
     pub upstream_proxy_url: String,
     pub upstream_proxy_username: String,
     pub upstream_proxy_password_configured: bool,
+    pub web_search_backend_kind: crate::gateway::web_search::backend::SearchBackendKind,
+    pub web_search_brave_api_key_configured: bool,
+    pub web_search_tavily_api_key_configured: bool,
+    pub web_search_metaso_api_key_configured: bool,
+    pub web_search_metaso_include_summary: bool,
+    pub web_search_metaso_concise_snippet: bool,
+    pub web_search_max_results: u32,
+    pub web_search_llm_provider_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, specta::Type)]
@@ -232,6 +243,19 @@ pub(crate) struct GatewayRectifierSettingsUpdate {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CircuitBreakerNoticeUpdate {
     pub enable_circuit_breaker_notice: bool,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WebSearchSettingsUpdate {
+    pub web_search_backend_kind: crate::gateway::web_search::backend::SearchBackendKind,
+    pub web_search_brave_api_key: SensitiveStringUpdate,
+    pub web_search_tavily_api_key: SensitiveStringUpdate,
+    pub web_search_metaso_api_key: SensitiveStringUpdate,
+    pub web_search_metaso_include_summary: bool,
+    pub web_search_metaso_concise_snippet: bool,
+    pub web_search_max_results: u32,
+    pub web_search_llm_provider_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, specta::Type)]
@@ -318,6 +342,14 @@ impl From<&settings::AppSettings> for SettingsView {
             upstream_proxy_url: value.upstream_proxy_url.clone(),
             upstream_proxy_username: value.upstream_proxy_username.clone(),
             upstream_proxy_password_configured: !value.upstream_proxy_password.is_empty(),
+            web_search_backend_kind: value.web_search_backend_kind,
+            web_search_brave_api_key_configured: !value.web_search_brave_api_key.is_empty(),
+            web_search_tavily_api_key_configured: !value.web_search_tavily_api_key.is_empty(),
+            web_search_metaso_api_key_configured: !value.web_search_metaso_api_key.is_empty(),
+            web_search_metaso_include_summary: value.web_search_metaso_include_summary,
+            web_search_metaso_concise_snippet: value.web_search_metaso_concise_snippet,
+            web_search_max_results: value.web_search_max_results,
+            web_search_llm_provider_id: value.web_search_llm_provider_id,
         }
     }
 }
@@ -595,6 +627,9 @@ pub(crate) async fn settings_set_impl(
         upstream_proxy_url,
         upstream_proxy_username,
         upstream_proxy_password,
+        web_search_backend_kind,
+        web_search_max_results,
+        web_search_llm_provider_id,
     } = update;
 
     let app_for_work = app.clone();
@@ -811,11 +846,16 @@ pub(crate) async fn settings_set_impl(
                 upstream_proxy_username,
                 upstream_proxy_password,
                 intercept_web_search: previous.intercept_web_search,
-                web_search_backend_kind: previous.web_search_backend_kind,
+                web_search_backend_kind: web_search_backend_kind.unwrap_or(previous.web_search_backend_kind),
                 web_search_brave_api_key: previous.web_search_brave_api_key.clone(),
                 web_search_tavily_api_key: previous.web_search_tavily_api_key.clone(),
-                web_search_max_results: previous.web_search_max_results,
-                web_search_llm_provider_id: previous.web_search_llm_provider_id,
+                web_search_metaso_api_key: previous.web_search_metaso_api_key.clone(),
+                web_search_metaso_include_summary: previous.web_search_metaso_include_summary,
+                web_search_metaso_concise_snippet: previous.web_search_metaso_concise_snippet,
+                web_search_max_results: web_search_max_results
+                    .unwrap_or(previous.web_search_max_results),
+                web_search_llm_provider_id: web_search_llm_provider_id
+                    .unwrap_or(previous.web_search_llm_provider_id),
             };
 
             settings::validate_bounds(&settings)?;
@@ -1029,6 +1069,56 @@ pub(crate) async fn settings_codex_session_id_completion_set(
     })
     .await
     .map_err(Into::into)
+}
+
+pub(crate) async fn settings_web_search_set(
+    app: tauri::AppHandle,
+    update: WebSearchSettingsUpdate,
+) -> Result<SettingsView, String> {
+    if update.web_search_max_results == 0 {
+        return Err("web_search_max_results must be >= 1".to_string());
+    }
+    let app_for_work = app.clone();
+    let result = blocking::run("settings_web_search_set", move || {
+        write_settings_view(&app_for_work, move |settings| {
+            settings.web_search_backend_kind = update.web_search_backend_kind;
+            settings.web_search_brave_api_key = apply_sensitive_string_update(
+                Some(update.web_search_brave_api_key),
+                std::mem::take(&mut settings.web_search_brave_api_key),
+            );
+            settings.web_search_tavily_api_key = apply_sensitive_string_update(
+                Some(update.web_search_tavily_api_key),
+                std::mem::take(&mut settings.web_search_tavily_api_key),
+            );
+            settings.web_search_metaso_api_key = apply_sensitive_string_update(
+                Some(update.web_search_metaso_api_key),
+                std::mem::take(&mut settings.web_search_metaso_api_key),
+            );
+            settings.web_search_metaso_include_summary = update.web_search_metaso_include_summary;
+            settings.web_search_metaso_concise_snippet = update.web_search_metaso_concise_snippet;
+            settings.web_search_max_results = update.web_search_max_results;
+            settings.web_search_llm_provider_id = update.web_search_llm_provider_id;
+            Ok(())
+        })
+    })
+    .await
+    .map_err(Into::into);
+
+    if let Ok(ref settings) = result {
+        tracing::info!(
+            backend = settings.web_search_backend_kind.to_string(),
+            brave_configured = settings.web_search_brave_api_key_configured,
+            tavily_configured = settings.web_search_tavily_api_key_configured,
+            metaso_configured = settings.web_search_metaso_api_key_configured,
+            metaso_include_summary = settings.web_search_metaso_include_summary,
+            metaso_concise_snippet = settings.web_search_metaso_concise_snippet,
+            max_results = settings.web_search_max_results,
+            llm_provider_id = ?settings.web_search_llm_provider_id,
+            "web search settings updated"
+        );
+    }
+
+    result
 }
 
 /// Background WSL sync triggered after settings change.

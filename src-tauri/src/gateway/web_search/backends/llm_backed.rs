@@ -9,15 +9,15 @@
 //! provider that natively supports Anthropic-style server-tool web search,
 //! without making that provider the main conversation path for the user.
 
-use crate::gateway::web_search::backend::{SearchError, SearchHit, SearchOptions, DEFAULT_SEARCH_TIMEOUT};
+use crate::gateway::web_search::backend::{
+    SearchError, SearchHit, SearchOptions, DEFAULT_SEARCH_TIMEOUT,
+};
 use serde_json::Value;
 use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct LlmBackedSearchBackend {
-    /// Provider identifier (mirrors `ProviderForGateway.id`).
-    pub provider_id: i64,
-    /// Friendly provider name used in logs / `x-aio-upstream-meta-url`.
+    /// Friendly provider name used in error messages.
     pub provider_name: String,
     /// Base URL of the upstream Anthropic-compatible API
     /// (e.g. `https://api.anthropic.com` or a third-party relay).
@@ -32,25 +32,18 @@ pub struct LlmBackedSearchBackend {
 
 impl LlmBackedSearchBackend {
     pub fn new(
-        provider_id: i64,
         provider_name: impl Into<String>,
         base_url: impl Into<String>,
         api_key: impl Into<String>,
         model: impl Into<String>,
     ) -> Self {
         Self {
-            provider_id,
             provider_name: provider_name.into(),
             base_url: base_url.into(),
             api_key: api_key.into(),
             model: model.into(),
             timeout: DEFAULT_SEARCH_TIMEOUT,
         }
-    }
-
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
-        self
     }
 
     fn build_client(&self) -> Result<reqwest::Client, SearchError> {
@@ -91,7 +84,11 @@ impl LlmBackedSearchBackend {
         let mut site_filter: Option<Value> = None;
         if !opts.allowed_domains.is_empty() {
             site_filter = Some(Value::Array(
-                opts.allowed_domains.iter().cloned().map(Value::String).collect(),
+                opts.allowed_domains
+                    .iter()
+                    .cloned()
+                    .map(Value::String)
+                    .collect(),
             ));
         }
         let web_search_tool = serde_json::json!({
@@ -105,7 +102,11 @@ impl LlmBackedSearchBackend {
         }
         if !opts.blocked_domains.is_empty() {
             web_search_tool["blocked_domains"] = Value::Array(
-                opts.blocked_domains.iter().cloned().map(Value::String).collect(),
+                opts.blocked_domains
+                    .iter()
+                    .cloned()
+                    .map(Value::String)
+                    .collect(),
             );
         }
 
@@ -132,7 +133,9 @@ impl LlmBackedSearchBackend {
             .json(&body)
             .send()
             .await
-            .map_err(|e| SearchError::Transport { message: e.to_string() })?;
+            .map_err(|e| SearchError::Transport {
+                message: e.to_string(),
+            })?;
 
         let status = resp.status();
         if !status.is_success() {
@@ -146,10 +149,9 @@ impl LlmBackedSearchBackend {
             });
         }
 
-        let bytes = resp
-            .bytes()
-            .await
-            .map_err(|e| SearchError::Transport { message: e.to_string() })?;
+        let bytes = resp.bytes().await.map_err(|e| SearchError::Transport {
+            message: e.to_string(),
+        })?;
 
         parse_web_search_result_blocks(&bytes)
     }
@@ -199,7 +201,10 @@ fn parse_web_search_result_blocks(raw: &[u8]) -> Result<Vec<SearchHit>, SearchEr
             continue;
         }
         if line.is_empty() && !current_data.is_empty() {
-            if matches!(current_event.as_deref(), Some("content_block_start" | "content_block_delta")) {
+            if matches!(
+                current_event.as_deref(),
+                Some("content_block_start" | "content_block_delta")
+            ) {
                 if let Ok(val) = serde_json::from_str::<Value>(&current_data) {
                     if let Some(block) = val.get("content_block") {
                         if let Some(arr) = block.get("content").and_then(|v| v.as_array()) {
@@ -317,8 +322,12 @@ mod tests {
 
     #[tokio::test]
     async fn missing_config_returns_invalid_config() {
-        let backend = LlmBackedSearchBackend::new(1, "demo", "https://example.com", "", "claude-sonnet");
-        let err = backend.search("rust", &SearchOptions::default()).await.unwrap_err();
+        let backend =
+            LlmBackedSearchBackend::new("demo", "https://example.com", "", "claude-sonnet");
+        let err = backend
+            .search("rust", &SearchOptions::default())
+            .await
+            .unwrap_err();
         match err {
             SearchError::InvalidConfig { message } => assert!(message.contains("api key")),
             other => panic!("expected InvalidConfig, got {other:?}"),

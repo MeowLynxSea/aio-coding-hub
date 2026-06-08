@@ -63,6 +63,7 @@ function createRectifierPatch(): GatewayRectifierSettingsPatch {
 type DefaultPropsOverrides = {
   appSettings?: ReturnType<typeof createTestAppSettings>;
   onPersistCommonSettings?: CliManagerGeneralTabProps["onPersistCommonSettings"];
+  onPersistWebSearch?: CliManagerGeneralTabProps["onPersistWebSearch"];
 };
 
 function createDefaultTabProps(overrides: DefaultPropsOverrides = {}) {
@@ -79,6 +80,8 @@ function createDefaultTabProps(overrides: DefaultPropsOverrides = {}) {
     codexSessionIdCompletionEnabled: true,
     codexSessionIdCompletionSaving: false,
     onPersistCodexSessionIdCompletion: vi.fn(),
+    webSearchSaving: false,
+    onPersistWebSearch: overrides.onPersistWebSearch ?? vi.fn(),
     cacheAnomalyMonitorEnabled: false,
     cacheAnomalyMonitorSaving: false,
     onPersistCacheAnomalyMonitor: vi.fn(),
@@ -127,6 +130,8 @@ describe("cli-manager/GeneralTab", () => {
         codexSessionIdCompletionEnabled={true}
         codexSessionIdCompletionSaving={false}
         onPersistCodexSessionIdCompletion={vi.fn()}
+        webSearchSaving={false}
+        onPersistWebSearch={vi.fn()}
         cacheAnomalyMonitorEnabled={false}
         cacheAnomalyMonitorSaving={false}
         onPersistCacheAnomalyMonitor={vi.fn()}
@@ -197,6 +202,8 @@ describe("cli-manager/GeneralTab", () => {
         codexSessionIdCompletionEnabled={true}
         codexSessionIdCompletionSaving={false}
         onPersistCodexSessionIdCompletion={onPersistCodexSessionIdCompletion}
+        webSearchSaving={false}
+        onPersistWebSearch={vi.fn()}
         cacheAnomalyMonitorEnabled={false}
         cacheAnomalyMonitorSaving={false}
         onPersistCacheAnomalyMonitor={onPersistCacheAnomalyMonitor}
@@ -307,6 +314,8 @@ describe("cli-manager/GeneralTab", () => {
         codexSessionIdCompletionEnabled={true}
         codexSessionIdCompletionSaving={false}
         onPersistCodexSessionIdCompletion={vi.fn()}
+        webSearchSaving={false}
+        onPersistWebSearch={vi.fn()}
         cacheAnomalyMonitorEnabled={false}
         cacheAnomalyMonitorSaving={false}
         onPersistCacheAnomalyMonitor={vi.fn()}
@@ -670,5 +679,49 @@ describe("cli-manager/GeneralTab", () => {
       });
     });
     expect(toast.success).toHaveBeenCalledWith("代理已禁用");
+  });
+
+  it("auto-saves web search backend selection and api key on blur", async () => {
+    const onPersistWebSearch = vi.fn().mockResolvedValue(
+      createTestAppSettings({
+        web_search_backend_kind: "metaso",
+        web_search_metaso_api_key_configured: true,
+      })
+    );
+
+    renderTab(
+      <CliManagerGeneralTab
+        {...createDefaultTabProps({
+          appSettings: createTestAppSettings({
+            web_search_backend_kind: "brave",
+            web_search_brave_api_key_configured: true,
+          }),
+          onPersistWebSearch,
+        })}
+      />
+    );
+
+    // Brave key field should auto-save on blur when non-empty (Brave is the
+    // initial backend, so the field is visible).
+    const braveKeyInput = screen.getByPlaceholderText("留空表示保留已保存 Key");
+    fireEvent.change(braveKeyInput, { target: { value: "BSA-newkey" } });
+    fireEvent.blur(braveKeyInput);
+    await waitFor(() => {
+      expect(onPersistWebSearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          webSearchBraveApiKey: { mode: "replace", value: "BSA-newkey" },
+        })
+      );
+    });
+
+    // Backend selection (RadioGroup) should auto-save on change.
+    onPersistWebSearch.mockClear();
+    const metasoRadio = screen.getByRole("radio", { name: "Metaso" });
+    fireEvent.click(metasoRadio);
+    await waitFor(() => {
+      expect(onPersistWebSearch).toHaveBeenCalledWith(
+        expect.objectContaining({ webSearchBackendKind: "metaso" })
+      );
+    });
   });
 });

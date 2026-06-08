@@ -110,6 +110,15 @@ pub(super) fn handler_runtime_settings(
                 tavily_api_key: settings_cfg
                     .map(|cfg| cfg.web_search_tavily_api_key.clone())
                     .unwrap_or_default(),
+                metaso_api_key: settings_cfg
+                    .map(|cfg| cfg.web_search_metaso_api_key.clone())
+                    .unwrap_or_default(),
+                metaso_include_summary: settings_cfg
+                    .map(|cfg| cfg.web_search_metaso_include_summary)
+                    .unwrap_or(false),
+                metaso_concise_snippet: settings_cfg
+                    .map(|cfg| cfg.web_search_metaso_concise_snippet)
+                    .unwrap_or(false),
                 max_results: settings_cfg
                     .map(|cfg| cfg.web_search_max_results)
                     .unwrap_or(10),

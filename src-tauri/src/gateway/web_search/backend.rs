@@ -54,6 +54,9 @@ pub enum SearchBackendKind {
     Brave,
     /// Built-in: queries the Tavily Search API (LLM-friendly results).
     Tavily,
+    /// Built-in: queries the Metaso Search API (LLM-friendly results with
+    /// optional AI-generated summaries).
+    Metaso,
     /// Recursive: invokes another configured LLM provider that natively
     /// supports `web_search_20250305`, then unwraps the search results.
     LlmBacked,
@@ -64,6 +67,7 @@ impl fmt::Display for SearchBackendKind {
         match self {
             Self::Brave => f.write_str("brave"),
             Self::Tavily => f.write_str("tavily"),
+            Self::Metaso => f.write_str("metaso"),
             Self::LlmBacked => f.write_str("llm_backed"),
         }
     }
@@ -116,23 +120,17 @@ pub const DEFAULT_SEARCH_TIMEOUT: Duration = Duration::from_secs(15);
 pub enum SearchBackendImpl {
     Brave(crate::gateway::web_search::backends::brave::BraveSearchBackend),
     Tavily(crate::gateway::web_search::backends::tavily::TavilySearchBackend),
+    Metaso(crate::gateway::web_search::backends::metaso::MetasoSearchBackend),
     LlmBacked(crate::gateway::web_search::backends::llm_backed::LlmBackedSearchBackend),
 }
 
 impl SearchBackendImpl {
-    pub fn kind(&self) -> SearchBackendKind {
-        match self {
-            Self::Brave(_) => SearchBackendKind::Brave,
-            Self::Tavily(_) => SearchBackendKind::Tavily,
-            Self::LlmBacked(_) => SearchBackendKind::LlmBacked,
-        }
-    }
-
     /// Short stable tag used in special_settings_json (e.g. "brave" / "tavily").
     pub fn tag(&self) -> &'static str {
         match self {
             Self::Brave(_) => "brave",
             Self::Tavily(_) => "tavily",
+            Self::Metaso(_) => "metaso",
             Self::LlmBacked(_) => "llm_backed",
         }
     }
