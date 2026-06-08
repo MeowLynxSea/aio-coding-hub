@@ -628,9 +628,22 @@ fn migrate_add_codex_oauth_compatible_proxy_mode(
     )
 }
 
+fn migrate_add_web_search_intercept(
+    settings: &mut AppSettings,
+    schema_version_present: bool,
+) -> bool {
+    // v34: Add web search interception settings (default off, Brave backend,
+    // 10 max results, no LLM provider selected).
+    migrate_bump_schema_version(
+        settings,
+        schema_version_present,
+        SCHEMA_VERSION_ADD_WEB_SEARCH_INTERCEPT,
+    )
+}
+
 type SettingsMigration = fn(&mut AppSettings, bool) -> bool;
 
-const SETTINGS_MIGRATIONS: [SettingsMigration; 27] = [
+const SETTINGS_MIGRATIONS: [SettingsMigration; 28] = [
     migrate_disable_upstream_timeouts,
     migrate_add_gateway_rectifiers,
     migrate_add_circuit_breaker_notice,
@@ -658,6 +671,7 @@ const SETTINGS_MIGRATIONS: [SettingsMigration; 27] = [
     migrate_add_upstream_proxy,
     migrate_add_upstream_proxy_credentials,
     migrate_add_codex_oauth_compatible_proxy_mode,
+    migrate_add_web_search_intercept,
 ];
 
 fn apply_settings_migrations(settings: &mut AppSettings, schema_version_present: bool) -> bool {

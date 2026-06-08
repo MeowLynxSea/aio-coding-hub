@@ -28,6 +28,12 @@ export type PersistedSettings = {
   upstream_stream_idle_timeout_seconds: number;
   upstream_request_timeout_non_streaming_seconds: number;
   intercept_anthropic_warmup_requests: boolean;
+  intercept_web_search: boolean;
+  web_search_backend_kind: "brave" | "tavily" | "llm_backed";
+  web_search_brave_api_key: string;
+  web_search_tavily_api_key: string;
+  web_search_max_results: number;
+  web_search_llm_provider_id: number | null;
   enable_thinking_signature_rectifier: boolean;
   enable_debug_log: boolean;
   enable_response_fixer: boolean;
@@ -59,6 +65,12 @@ export const DEFAULT_PERSISTED_SETTINGS: PersistedSettings = {
   upstream_stream_idle_timeout_seconds: 0,
   upstream_request_timeout_non_streaming_seconds: 0,
   intercept_anthropic_warmup_requests: false,
+  intercept_web_search: false,
+  web_search_backend_kind: "brave",
+  web_search_brave_api_key: "",
+  web_search_tavily_api_key: "",
+  web_search_max_results: 10,
+  web_search_llm_provider_id: null,
   enable_thinking_signature_rectifier: true,
   enable_debug_log: false,
   enable_response_fixer: true,

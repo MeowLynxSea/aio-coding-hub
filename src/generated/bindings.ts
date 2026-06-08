@@ -2309,6 +2309,7 @@ export type GatewayProviderCircuitStatus = {
 export type GatewayRectifierSettingsUpdate = {
   verboseProviderError: boolean;
   interceptAnthropicWarmupRequests: boolean;
+  interceptWebSearch: boolean;
   enableThinkingSignatureRectifier: boolean;
   enableThinkingBudgetRectifier: boolean;
   enableBillingHeaderRectifier: boolean;

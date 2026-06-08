@@ -163,6 +163,7 @@ pub(crate) struct SettingsView {
     pub enable_circuit_breaker_notice: bool,
     pub verbose_provider_error: bool,
     pub intercept_anthropic_warmup_requests: bool,
+    pub intercept_web_search: bool,
     pub enable_thinking_signature_rectifier: bool,
     pub enable_thinking_budget_rectifier: bool,
     pub enable_billing_header_rectifier: bool,
@@ -214,6 +215,7 @@ pub(crate) struct SettingsMutationResult {
 pub(crate) struct GatewayRectifierSettingsUpdate {
     pub verbose_provider_error: bool,
     pub intercept_anthropic_warmup_requests: bool,
+    pub intercept_web_search: bool,
     pub enable_thinking_signature_rectifier: bool,
     pub enable_thinking_budget_rectifier: bool,
     pub enable_billing_header_rectifier: bool,
@@ -284,6 +286,7 @@ impl From<&settings::AppSettings> for SettingsView {
             enable_circuit_breaker_notice: value.enable_circuit_breaker_notice,
             verbose_provider_error: value.verbose_provider_error,
             intercept_anthropic_warmup_requests: value.intercept_anthropic_warmup_requests,
+            intercept_web_search: value.intercept_web_search,
             enable_thinking_signature_rectifier: value.enable_thinking_signature_rectifier,
             enable_thinking_budget_rectifier: value.enable_thinking_budget_rectifier,
             enable_billing_header_rectifier: value.enable_billing_header_rectifier,
@@ -807,6 +810,12 @@ pub(crate) async fn settings_set_impl(
                 upstream_proxy_url,
                 upstream_proxy_username,
                 upstream_proxy_password,
+                intercept_web_search: previous.intercept_web_search,
+                web_search_backend_kind: previous.web_search_backend_kind,
+                web_search_brave_api_key: previous.web_search_brave_api_key.clone(),
+                web_search_tavily_api_key: previous.web_search_tavily_api_key.clone(),
+                web_search_max_results: previous.web_search_max_results,
+                web_search_llm_provider_id: previous.web_search_llm_provider_id,
             };
 
             settings::validate_bounds(&settings)?;
@@ -955,6 +964,7 @@ pub(crate) async fn settings_gateway_rectifier_set(
             settings.verbose_provider_error = update.verbose_provider_error;
             settings.intercept_anthropic_warmup_requests =
                 update.intercept_anthropic_warmup_requests;
+            settings.intercept_web_search = update.intercept_web_search;
             settings.enable_thinking_signature_rectifier =
                 update.enable_thinking_signature_rectifier;
             settings.enable_thinking_budget_rectifier = update.enable_thinking_budget_rectifier;
@@ -977,6 +987,7 @@ pub(crate) async fn settings_gateway_rectifier_set(
         tracing::info!(
             verbose_provider_error = settings.verbose_provider_error,
             intercept_anthropic_warmup_requests = settings.intercept_anthropic_warmup_requests,
+            intercept_web_search = settings.intercept_web_search,
             enable_thinking_signature_rectifier = settings.enable_thinking_signature_rectifier,
             enable_thinking_budget_rectifier = settings.enable_thinking_budget_rectifier,
             enable_billing_header_rectifier = settings.enable_billing_header_rectifier,

@@ -178,6 +178,18 @@ export function CliManagerGeneralTab({
                   />
                 </SettingsRow>
                 <SettingsRow
+                  label="Web Search 拦截"
+                  subtitle="启用后,网关会拦截 Claude Code 内部的 WebSearchTool 调用,改用本机配置的搜索后端(Brave / Tavily / LLM-backed)应答。关闭时按原样转发到上游。"
+                >
+                  <Switch
+                    checked={rectifier.intercept_web_search}
+                    onCheckedChange={(checked) =>
+                      void onPersistRectifier({ intercept_web_search: checked })
+                    }
+                    disabled={rectifierDisabled}
+                  />
+                </SettingsRow>
+                <SettingsRow
                   label="Thinking 签名整流器"
                   subtitle="自动修复 extended thinking 相关的签名问题。"
                 >
