@@ -194,7 +194,7 @@ fn truncate(s: &str, max: usize) -> &str {
 fn host_of(url: &str) -> Option<String> {
     let after_scheme = url.split_once("://")?.1;
     let host_end = after_scheme
-        .find(|c: char| c == '/' || c == '?' || c == '#' || c == ':')
+        .find(['/', '?', '#', ':'])
         .unwrap_or(after_scheme.len());
     let host = &after_scheme[..host_end];
     if host.is_empty() {
